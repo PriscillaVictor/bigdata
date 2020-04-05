@@ -1,39 +1,15 @@
-# This code is written by one of our student. Works only in Spark2.0 and above
 
-case class LogRecord( host: String, timeStamp: String, url:String,httpCode:Int)
 
-val PATTERN = """^(\S+) (\S+) (\S+) \[([\w:/]+\s[+\-]\d{4})\] "(\S+) (\S+)(.*)" (\d{3}) (\S+)""".r
+var file=sc.textFile("/data/spark/project/NASA_access_log_Aug95.gz")
+var valid=file.map(_.split(" ")).filter(_.size==10)
+case class log(host:String,timestamp:String,url:String,code:String,bytes:String)
+var df = valid.map(x=> log(x(0).toString,x(3).toString,x(6).toString,x(8).toString,x(9).toString)).toDF()
 
-def parseLogLine(log: String):
-	LogRecord = {
-		val res = PATTERN.findFirstMatchIn(log) 
-		if (res.isEmpty)
-		{
-			println("Rejected Log Line: " + log)
-			LogRecord("Empty", "", "",  -1 )
-		}
-		else 
-		{
-			val m = res.get
-			LogRecord(m.group(1), m.group(4),m.group(6), m.group(8).toInt)
-		}
-	}
 
-val logFile = sc.textFile("/data/spark/project/NASA_access_log_Aug95.gz")
-val accessLog = logFile.map(parseLogLine)
-val accessDf = accessLog.toDF()
-accessDf.printSchema
-accessDf.createOrReplaceTempView("nasalog")
-val output = spark.sql("select * from nasalog")
-output.createOrReplaceTempView("nasa_log")
-spark.sql("cache TABLE nasa_log")
+var result1 = df.groupBy($"url").count().orderBy($"count".desc).show(10)
 
-spark.sql("select url,count(*) as req_cnt from nasa_log where upper(url) like '%HTML%' group by url order by req_cnt desc LIMIT 10").show
+var result2 = df.groupBy(substring($"timestamp",2,14).as("timeFrame") ).count().orderBy($"count".desc).show(5)
 
-spark.sql("select host,count(*) as req_cnt from nasa_log group by host order by req_cnt desc LIMIT 5").show
+var result3 = df.groupBy(substring($"timestamp",2,14).as("timeFrame") ).count().orderBy($"count").show(5)
 
-spark.sql("select substr(timeStamp,1,14) as timeFrame,count(*) as req_cnt from nasa_log group by substr(timeStamp,1,14) order by req_cnt desc LIMIT 5").show
-
-spark.sql("select substr(timeStamp,1,14) as timeFrame,count(*) as req_cnt from nasa_log group by substr(timeStamp,1,14) order by req_cnt  LIMIT 5").show
-
-spark.sql("select httpCode,count(*) as req_cnt from nasa_log group by httpCode ").show
+var result4 = df.groupBy($"code".as("HTTP code")).count().orderBy($"count".desc).show(2)
